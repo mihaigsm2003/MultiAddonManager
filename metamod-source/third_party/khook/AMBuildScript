@@ -1,0 +1,48 @@
+class KHook(object):
+  def __init__(self):
+    self.all_targets = []
+    self.libsafetyhook = {}
+    self.libkhook = {}
+    self.libgtest = {}
+    self.test_binaries = []
+
+  def configure(self):
+    target_archs = []
+    if builder.options.targets:
+      target_archs = builder.options.targets.split(',')
+    else:
+      target_archs = ['x86', 'x86_64']
+
+    for arch in target_archs:
+      try:
+        cxx = builder.DetectCxx(target_arch = arch)
+      except Exception as e:
+        if builder.options.targets:
+          raise
+        print('Skipping target {}: {}'.format(arch, e))
+        continue
+      self.all_targets.append(cxx)
+	
+    for cxx in self.all_targets:
+        if cxx.like('gcc'):
+            cxx.cxxflags += [
+                '-std=c++17',
+            ]
+        elif cxx.family == 'msvc':
+            cxx.cxxflags += [
+                '/std:c++17'
+            ]
+        if getattr(builder.options, 'enable_tests', False):
+            cxx.defines += ['KHOOK_TESTS']
+
+
+KH = KHook()
+KH.configure()
+builder.Build('third_party/safetyhook/AMBuilder', {'SafetyHook': KH})
+builder.Build('AMBuilder', {'KHook': KH})
+
+if getattr(builder.options, 'enable_tests', False):
+  builder.Build('test/AMBuilder.gtest', {'GTest': KH})
+  builder.Build('test/AMBuilder', {'TestRunner': KH, 'KHook': KH, 'SafetyHook': KH})
+
+builder.Build('PackageScript', {'KHook': KH})

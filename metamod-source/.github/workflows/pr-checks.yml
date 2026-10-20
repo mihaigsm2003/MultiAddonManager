@@ -1,0 +1,69 @@
+name: PR Checks
+on:
+  pull_request:
+    branches:
+      - master
+      - '[0-9]+.[0-9]+-dev'
+jobs:
+  build-and-test:
+    strategy:
+      matrix:
+        include:
+          - platform: windows
+            os: windows-latest
+            os_short: win
+          - platform: linux
+            os: ubuntu-latest
+            os_short: linux
+            container_image: ghcr.io/alliedmodders/build-containers/debian11-clang22:latest
+      fail-fast: false
+    runs-on: ${{ matrix.os }}
+    container:
+      image: ${{ matrix.container_image }}
+    name: ${{ matrix.os_short }}
+    env:
+      SDKS: '["episode1","tf2","l4d2","cs2","insurgency"]'
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          submodules: recursive
+          path: metamod-source
+
+      # Largely a workaround for issue where github.workspace doesn't match $GITHUB_WORKSPACE
+      # in containerized jobs. See https://github.com/actions/runner/issues/2058
+      - name: Resolve paths
+        id: path_helper
+        shell: bash
+        run: |
+          echo "dependencies=$GITHUB_WORKSPACE/dependencies" >> $GITHUB_OUTPUT
+
+      - name: Cache dependencies
+        uses: actions/cache@v5
+        env:
+          cache-name: hl2sdk
+        with:
+          path: ${{ steps.path_helper.outputs.dependencies }}
+          key: ${{ runner.os }}-build-${{ env.cache-name }}-${{ join(fromJSON(env.SDKS), '') }}
+          restore-keys: ${{ runner.os }}-build-${{ env.cache-name }}-
+
+      - name: Install dependencies
+        shell: bash
+        run: |
+          mkdir -p '${{ steps.path_helper.outputs.dependencies }}'
+          cd '${{ steps.path_helper.outputs.dependencies }}'
+
+          # Satisfy checkout-deps requirement for a "metamod-source" folder.
+          mkdir -p metamod-source
+          ../metamod-source/support/checkout-deps.sh -s ${{ join(fromJSON(env.SDKS), ',') }}
+
+      - name: Build
+        working-directory: metamod-source
+        shell: bash
+        run: |
+          mkdir build
+          cd build
+          python3 ../configure.py \
+            --enable-optimize \
+            --sdks=${{ join(fromJSON(env.SDKS), ',') }} \
+            '--hl2sdk-root=${{ steps.path_helper.outputs.dependencies }}'
+          ambuild
