@@ -1,6 +1,7 @@
 # MultiAddonManager
 
 A MetaMod plugin that allows you to use multiple workshop addons at once and have clients download them.
+Original plugin is here: https://github.com/Source2ZE/MultiAddonManager  Thanks to xen
 
 ## ConVars
 - `mm_extra_addons <ids>` The workshop IDs of extra addons separated by commas, addons will be downloaded (if not present) and mounted (e.g. "3090239773,3070231528").
