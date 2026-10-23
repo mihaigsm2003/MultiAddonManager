@@ -19,8 +19,8 @@ for sdk_target in MMSPlugin.sdk_targets:
   try:
     version = subprocess.check_output(['git', 'describe', '--tags', '--long']).decode('ascii').strip()
   except subprocess.SubprocessError as e:
-    version = "1.6.3"
-    print("git describe failed; using release version 1.6.3")
+    version = "1.6.4"
+    print("git describe failed; using release version 1.6.4")
 	
   print(f'Setting version to "{version}"')
   binary.compiler.defines += ['MULTIADDONMANAGER_VERSION="%s"'%(version)]
