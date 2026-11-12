@@ -20,7 +20,6 @@ public:
 	friend class CEntityIdentity;
 
 	CEntityHandle();
-	CEntityHandle(const CEntityHandle& other);
 	CEntityHandle(uint32 value);
 	CEntityHandle(int iEntry, int iSerialNumber);
 
@@ -32,13 +31,13 @@ public:
 	int GetEntryIndex() const;
 	int GetSerialNumber() const;
 
-	int ToInt() const;
+	uint32 ToInt() const;
 
 	// AMNOTE: Packs handle to an int used in net messages for example, replicates Server_EHandleToInt logic
-	int ToPackedInt() const;
+	uint32 ToPackedInt() const;
 	// AMNOTE: Unpacks previously packed handle, mostly used in net messages.
 	// Note: this is implemented in game code (ehandle.h)
-	static CEntityHandle FromPackedInt( int packed_handle );
+	static CEntityHandle FromPackedInt( uint32 packed_handle );
 
 	bool operator !=(const CEntityHandle& other) const;
 	bool operator ==(const CEntityHandle& other) const;
@@ -70,11 +69,6 @@ protected:
 inline CEntityHandle::CEntityHandle()
 {
 	m_Index = INVALID_EHANDLE_INDEX;
-}
-
-inline CEntityHandle::CEntityHandle(const CEntityHandle& other)
-{
-	m_Index = other.m_Index;
 }
 
 inline CEntityHandle::CEntityHandle(uint32 value)
@@ -118,12 +112,12 @@ inline int CEntityHandle::GetSerialNumber() const
 	return m_Parts.m_Serial;
 }
 
-inline int CEntityHandle::ToInt() const
+inline uint32 CEntityHandle::ToInt() const
 {
 	return m_Index;
 }
 
-inline int CEntityHandle::ToPackedInt() const
+inline uint32 CEntityHandle::ToPackedInt() const
 {
 	if(!IsValid())
 		return 0xFFFFFF;

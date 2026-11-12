@@ -5,8 +5,8 @@
 #pragma once
 #endif
 
-#include "tier1/utlsymbollarge.h"
-#include "tier1/utlvector.h"
+#include "tier0/utlsymbollarge.h"
+#include "tier0/utlvector.h"
 #include "entity2/entitycomponent.h"
 #include "entityhandle.h"
 #include "networksystem/iflattenedserializers.h"
@@ -21,8 +21,8 @@ enum EntityClassFlags_t
 	ECF_BECOME_SUSPENDED_INSTEAD_OF_DORMANT = (1 << 5), // Suspend entities outside of PVS
 	ECF_ANONYMOUS_ENTITY					= (1 << 6), // If the EntityClass is anonymous
 	ECF_PRECACHE_NETWORKED_ENTITY_ON_CLIENT	= (1 << 7),
-	ECF_UNK001								= (1 << 8),
-	ECF_UNK002								= (1 << 9),
+	ECF_HAS_ALTERNATE_BASELINES				= (1 << 8),
+	ECF_ALTERNATE_BASELINES_USE_RECIPIENTS_FILTERS = (1 << 9),
 	ECF_FORCE_WORLDGROUPID					= (1 << 10) // Forces worldgroupid to be 1 on created entities
 };
 
@@ -46,10 +46,20 @@ typedef enum
 	USE_TOGGLE = 3
 } USE_TYPE;
 
-// AMNOTE: In action these are member function ptrs instead of raw pointers
-typedef void (*BASEPTR)(CEntityInstance *ent);
-typedef void (*ENTITYFUNCPTR)(CEntityInstance *pOther);
-typedef void (*USEPTR)(CEntityInstance *pActivator, CEntityInstance *pCaller, USE_TYPE useType, float value);
+struct EntityUseInput_t
+{
+	CEntityInstance *m_pActivator;
+	CEntityInstance *m_pCaller;
+	USE_TYPE m_nType;
+	float m_flValue;
+};
+
+// Keeps the member function pointers below as small as the engine's
+class SINGLE_INHERITANCE CEntityInstance;
+
+typedef void (CEntityInstance::*BASEPTR)();
+typedef void (CEntityInstance::*ENTITYFUNCPTR)(CEntityInstance *pOther);
+typedef void (CEntityInstance::*USEPTR)(const EntityUseInput_t *pInput);
 
 struct EntClassComponentOverride_t
 {
@@ -81,7 +91,6 @@ public:
 	datamap_t* m_pDataDescMap;
 };
 
-// Size: 0x128
 class CEntityClass
 {
 	struct ComponentOffsets_t
@@ -138,8 +147,8 @@ public:
 	CEntitySharedPulseSignature *m_pSharedPulseSignature;
 
 	RegisterPulseBindingsCb m_pfnRegisterPulseBindings;
-	// Allows to get any think functions in use or to get its string name for this class
-	// does searches to the parent classes as well
+	// Convert this class' think and touch functions to and from their names,
+	// searching the parent classes as well
 	NameToFuncCb m_NameToThinkFunc;
 	FuncToNameCb m_ThinkFuncToName;
 	EnumerateComponentsCb m_pfnEnumerateComponents;
@@ -151,11 +160,12 @@ public:
 	CUtlSymbolLarge m_designerName;
 
 	// Uses EntityClassFlags_t flags
-	uint m_flags;
+	uint32 m_flags;
 
 	int m_SpawnOrder;
 	
-	uint m_nAllHelpersFlags;
+	// The EntityHelperFlags_t of all its component helpers
+	uint32 m_nAllHelpersFlags;
 
 	CUtlVector<ComponentOffsets_t> m_ComponentOffsets;
 	CUtlVector<ComponentHelper_t> m_AllHelpers;

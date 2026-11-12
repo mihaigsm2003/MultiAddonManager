@@ -29,13 +29,11 @@
 #include "hoststate.h"
 #include "igameeventsystem.h"
 #include "serversideclient.h"
-#include "filesystem.h"
+#include "filesystem/ifilesystem.h"
 #include "steam/steam_gameserver.h"
 #include <string>
 #include <sstream>
 #include <fstream>
-#include "iserver.h"
-
 #include "tier0/memdbgon.h"
 
 CConVar<bool> mm_addon_mount_download("mm_addon_mount_download", FCVAR_NONE, "Whether to download an addon upon mounting even if it's installed", false);
@@ -116,10 +114,8 @@ ISteamUGC *GetSteamUGC()
 
 typedef bool (FASTCALL *SendNetMessage_t)(CServerSideClientBase *, const CNetMessage*, NetChannelBufType_t);
 typedef void (FASTCALL *HostStateRequest_t)(CHostStateMgr*, CHostStateRequest*);
-typedef void (FASTCALL *ReplyConnection_t)(INetworkGameServer *, CServerSideClient *);
+typedef void (FASTCALL *ReplyConnection_t)(CNetworkGameServerBase *, CServerSideClient *);
 typedef uint64 (FASTCALL *ScriptGetAddon_t)();
-
-class GameSessionConfiguration_t { };
 
 // Signatures
 
@@ -132,14 +128,10 @@ constexpr const char *g_ReplyConnection_Sig = "48 8B C4 55 41 55 41 56";
 constexpr const char *g_ScriptGetAddon_Sig = "40 56 48 83 EC ? 48 8B 0D ? ? ? ? 48 8D 54 24";
 #else
 constexpr const char *g_HostStateRequest_Sig = "55 48 89 E5 41 56 41 55 41 54 49 89 F4 53 48 83 7F";
-constexpr const char *g_ReplyConnection_Sig = "55 B9 ? ? ? ? 41 B8";
+constexpr const char *g_ReplyConnection_Sig = "55 41 B8 ? ? ? ? B9 ? ? ? ? 48 89 E5 41 57";
 constexpr const char *g_ScriptGetAddon_Sig = "55 48 89 E5 41 55 41 54 48 8D 75 ? 53 48 83 EC ? 48 8D 05 ? ? ? ? 48 C7 45 ? ? ? ? ? 48 C7 45 ? ? ? ? ? 48 8B 38 48 8B 07 FF 90 ? ? ? ? 8B 55";
 #endif
 
-
-// Offsets
-constexpr int g_iServerAddonsOffset = 376;
-constexpr int g_iClientListOffset = 616;
 
 #ifdef PLATFORM_WINDOWS
 constexpr int g_iSendNetMessageOffset = 15;
@@ -198,24 +190,25 @@ static void TrackPendingAddon(ClientAddonInfo_t &clientInfo, const std::string &
 	clientInfo.currentPendingAddon = addon;
 }
 
-CUtlVector<CServerSideClient *> *GetClientList()
+CUtlVector<CServerSideClientBase *> *GetClientList()
 {
 	if (!g_pNetworkServerService)
 		return nullptr;
 
-	return (CUtlVector<CServerSideClient *> *)((char *)g_pNetworkServerService->GetIGameServer() + g_iClientListOffset);
+	CNetworkGameServerBase *server = g_pNetworkServerService->GetIGameServer();
+	return server ? &server->m_Clients : nullptr;
 }
 
-static CServerSideClient *FindClientBySteamID(uint64 steamID64)
+static CServerSideClientBase *FindClientBySteamID(uint64 steamID64)
 {
-	CUtlVector<CServerSideClient *> *clients = GetClientList();
+	CUtlVector<CServerSideClientBase *> *clients = GetClientList();
 	if (!clients)
 		return nullptr;
 
-	CUtlVector<CServerSideClient *> &clientList = *clients;
+	CUtlVector<CServerSideClientBase *> &clientList = *clients;
 	FOR_EACH_VEC(clientList, i)
 	{
-		CServerSideClient *client = clientList[i];
+		CServerSideClientBase *client = clientList[i];
 		if (client && client->GetClientSteamID().ConvertToUint64() == steamID64)
 			return client;
 	}
@@ -651,7 +644,7 @@ void MultiAddonManager::RefreshAddons(bool bReloadMap)
 			bAllAddonsMounted = false;
 	}
 
-	if (bAllAddonsMounted && bReloadMap)
+	if (bAllAddonsMounted && bReloadMap && m_ExtraAddons.Count() > 0)
 		ReloadMap();
 }
 
@@ -770,15 +763,19 @@ CNetMessagePB<CNETMsg_SignonState> *GetAddonSignonStateMessage(const char *pszAd
 	if (!gpGlobals)
 		return nullptr;
 
-	INetworkMessageInternal *pNetMsg = g_pNetworkMessages->FindNetworkMessagePartial("SignonState");
-	CNetMessagePB<CNETMsg_SignonState> *pMsg = pNetMsg->AllocateMessage()->ToPB<CNETMsg_SignonState>();
+	CUtlVector<CServerSideClientBase *> *clients = GetClientList();
+	if (!clients)
+		return nullptr;
+
+	NetMessageInfo_t *pNetMsg = g_pNetworkMessages->FindNetworkMessagePartial("SignonState");
+	CNetMessagePB<CNETMsg_SignonState> *pMsg = pNetMsg->m_pfnAllocate()->ToPB<CNETMsg_SignonState>();
 	pMsg->set_spawn_count(gpGlobals->serverCount);
 	pMsg->set_signon_state(SIGNONSTATE_CHANGELEVEL);
 	pMsg->set_addons(pszAddon ? pszAddon : "");
-	pMsg->set_num_server_players(GetClientList()->Count());
-	for (int i = 0; i < GetClientList()->Count(); i++)
+	pMsg->set_num_server_players(clients->Count());
+	for (int i = 0; i < clients->Count(); i++)
 	{
-		auto client = GetClientList()->Element(i);
+		auto client = clients->Element(i);
 
 		char const *szNetworkId = g_pEngineServer->GetPlayerNetworkIDString(client->GetPlayerSlot());
 
@@ -820,16 +817,22 @@ void MultiAddonManager::AddClientAddon(const char *pszAddon, uint64 steamID64, b
 	
 	if (bRefresh)
 	{
-		CUtlVector<CServerSideClient*> &clients = *GetClientList();
+		CUtlVector<CServerSideClientBase *> *clientList = GetClientList();
+		if (!clientList)
+		{
+			Panic("Cannot refresh client addons while the network game server is unavailable\n");
+			return;
+		}
+
 		auto pMsg = GetAddonSignonStateMessage(pszAddon);
 		if (!pMsg)
 		{
 			Panic("Failed to create signon state message for %s\n", pszAddon);
 			return;
 		}
-		FOR_EACH_VEC(clients, i)
+		FOR_EACH_VEC(*clientList, i)
 		{
-			CServerSideClient *pClient = clients[i];
+			CServerSideClientBase *pClient = (*clientList)[i];
 			if (steamID64 == 0 || pClient->GetClientSteamID().ConvertToUint64() == steamID64)
 			{
 				// Client is already loading, telling them to reload now will actually just disconnect them. ("Received signon %i when at %i\n" in client console)
@@ -1009,7 +1012,7 @@ KHook::Return<void> MultiAddonManager::Hook_StartupServer(INetworkServerService 
 
 bool Hook_SendNetMessage(CServerSideClientBase *pClient, const CNetMessage *pData, NetChannelBufType_t bufType, SendNetMessage_t pOriginalFunc)
 {
-	NetMessageInfo_t *info = pData->GetNetMessage()->GetNetMessageInfo();
+	NetMessageInfo_t *info = pData->GetNetMessage();
 	
 	uint64 steamID64 = pClient->GetClientSteamID().ConvertToUint64();
 	ClientAddonInfo_t &clientInfo = g_ClientAddons[steamID64];
@@ -1248,6 +1251,8 @@ KHook::Return<void> MultiAddonManager::Hook_GameFrame(IServerGameDLL *pThis, boo
 		return {KHook::Action::Ignore};
 
 	auto pClients = GetClientList();
+	if (!pClients)
+		return {KHook::Action::Ignore};
 
 	FOR_EACH_VEC(*pClients, i)
 	{
@@ -1283,7 +1288,7 @@ KHook::Return<bool> MultiAddonManager::Hook_FireEvent(IGameEventManager2 *pThis,
 	return {KHook::Action::Ignore};
 }
 
-KHook::Return<void> MultiAddonManager::Hook_ReplyConnection(INetworkGameServer *pThis, CServerSideClient *pClient)
+KHook::Return<void> MultiAddonManager::Hook_ReplyConnection(CNetworkGameServerBase *pThis, CServerSideClient *pClient)
 {
 	uint64 steamID64 = pClient->GetClientSteamID().ConvertToUint64();
 	// Clear cache if necessary.
@@ -1306,8 +1311,7 @@ KHook::Return<void> MultiAddonManager::Hook_ReplyConnection(INetworkGameServer *
 	SkipPendingOptionalAddon(steamID64);
 
 	// Server copies the CUtlString from CNetworkGameServer to this client.
-	CUtlString *addons = (CUtlString *)((uintptr_t)pThis + g_iServerAddonsOffset);
-	CUtlString originalAddons = *addons;
+	CUtlString originalAddons = pThis->m_szAddonName;
 
 	// Figure out which addons the client should be loading.
 	CUtlVector<std::string> clientAddons;
@@ -1335,9 +1339,9 @@ KHook::Return<void> MultiAddonManager::Hook_ReplyConnection(INetworkGameServer *
 		clientInfo.currentPendingAddon.clear();
 		clientInfo.pendingAddonForTimeout.clear();
 		clientInfo.pendingAddonStartTime = 0.0;
-		*addons = "";
+		pThis->m_szAddonName = "";
 		m_hookReplyConnection.CallOriginal(pThis, pClient);
-		*addons = originalAddons;
+		pThis->m_szAddonName = originalAddons;
 		return {KHook::Action::Supersede};
 	}
 
@@ -1374,14 +1378,14 @@ KHook::Return<void> MultiAddonManager::Hook_ReplyConnection(INetworkGameServer *
 		clientAddons.Remove(i);
 	}
 	
-	*addons = VectorToString(clientAddons).c_str();
+	pThis->m_szAddonName = VectorToString(clientAddons).c_str();
 
 	if (mm_addon_debug.Get())
-		Message("%s: Sending addons %s to steamID64 %lli\n", __func__, addons->Get(), steamID64);
+		Message("%s: Sending addons %s to steamID64 %lli\n", __func__, pThis->m_szAddonName.Get(), steamID64);
 
 	m_hookReplyConnection.CallOriginal(pThis, pClient);
 
-	*addons = originalAddons;
+	pThis->m_szAddonName = originalAddons;
 
 	return {KHook::Action::Supersede};
 }

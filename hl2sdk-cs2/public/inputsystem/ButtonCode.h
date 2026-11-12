@@ -12,7 +12,7 @@
 #pragma once
 #endif
 
-#include "inputsystem/InputEnums.h"
+#include "inputsystem/inputenums.h"
 
 //-----------------------------------------------------------------------------
 // Button enum. "Buttons" are binary-state input devices (mouse buttons, keyboard keys)
@@ -226,7 +226,7 @@ inline bool IsSpace( ButtonCode_t code )
 
 inline bool IsKeypad( ButtonCode_t code )
 {
-	return ( code >= MOUSE_FIRST ) && ( code <= KEY_PAD_DECIMAL );
+	return ( code >= KEY_PAD_0 ) && ( code <= KEY_PAD_DECIMAL );
 }
 
 inline bool IsPunctuation( ButtonCode_t code )

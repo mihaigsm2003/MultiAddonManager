@@ -11,7 +11,7 @@
 #pragma once
 #endif
 
-#include "entity2/entitysystem.h"
+#include "gameentitysystem.h"
 #include "entity2/entityinstance.h"
 #include "entityhandle.h"
 
@@ -24,13 +24,13 @@ inline CEntityInstance* CEntityHandle::Get() const
 	return GameEntitySystem()->GetEntityInstance( *this );
 }
 
-inline CEntityHandle CEntityHandle::FromPackedInt( int packed_int_handle )
+inline CEntityHandle CEntityHandle::FromPackedInt( uint32 packed_int_handle )
 {
 	if(packed_int_handle == 0xFFFFFF)
 		return CEntityHandle();
 
 	CEntityIndex index = packed_int_handle & 0x3FFF;
-	auto serial = (packed_int_handle >> 14) & 0x3FF;
+	int serial = (packed_int_handle >> 14) & 0x3FF;
 
 	auto entity = GameEntitySystem()->GetEntityInstance( index );
 	if(!entity)

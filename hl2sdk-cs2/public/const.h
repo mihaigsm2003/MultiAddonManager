@@ -44,14 +44,9 @@
 #endif
 
 // a player name may have 31 chars + 0 on the PC.
-// the 360 only allows 15 char + 0, but stick with the larger PC size for cross-platform communication
 #define MAX_PLAYER_NAME_LENGTH		32
 
-#ifdef _X360
-#define MAX_PLAYERS_PER_CLIENT		XUSER_MAX_COUNT	// Xbox 360 supports 4 players per console
-#else
 #define MAX_PLAYERS_PER_CLIENT		1	// One player per PC
-#endif
 
 #define MAX_MAP_NAME				32	
 #define	MAX_NETWORKID_LENGTH		64  // num chars for a network (i.e steam) ID
@@ -122,12 +117,12 @@ enum Flags_t : uint32
 	FL_FLY 						= (1u << 10), // Changes the SV_Movestep() behavior to not need to be on ground
 	FL_SUPPRESS_SAVE 			= (1u << 11),
 	FL_IN_VEHICLE 				= (1u << 12),
-	FL_IN_VEHICLE_TRANSPORT 	= (1u << 13),
+	// FL_EMPTY 				= (1u << 13),
 	FL_GODMODE 					= (1u << 14),
 	FL_NOTARGET 				= (1u << 15),
 	FL_AIMTARGET 				= (1u << 16), // set if the crosshair needs to aim onto the entity
 	// FL_EMPTY 				= (1u << 17),
-	FL_STATICPROP 				= (1u << 18), // Eetsa static prop!
+	// FL_EMPTY 				= (1u << 18),
 	// FL_EMPTY 				= (1u << 19),
 	FL_GRENADE 					= (1u << 20),
 	// FL_EMPTY					= (1u << 21),
@@ -205,21 +200,11 @@ enum SolidType_t : uint8
 // GAMMACASE: Potentially obsolete
 enum SolidFlags_t
 {
-	FSOLID_CUSTOMRAYTEST		= 0x0001,	// Ignore solid type + always call into the entity for ray tests
-	FSOLID_CUSTOMBOXTEST		= 0x0002,	// Ignore solid type + always call into the entity for swept box tests
+	FSOLID_NOT_STANDABLE		= 0x0001,	// You can't stand on this
+	FSOLID_USE_TRIGGER_BOUNDS	= 0x0002,	// Uses a special trigger bounds separate from the normal OBB
 	FSOLID_NOT_SOLID			= 0x0004,	// Are we currently not solid?
-	FSOLID_TRIGGER				= 0x0008,	// This is something may be collideable but fires touch functions
-											// even when it's not collideable (when the FSOLID_NOT_SOLID flag is set)
-	FSOLID_NOT_STANDABLE		= 0x0010,	// You can't stand on this
-	FSOLID_VOLUME_CONTENTS		= 0x0020,	// Contains volumetric contents (like water)
-	FSOLID_FORCE_WORLD_ALIGNED	= 0x0040,	// Forces the collision rep to be world-aligned even if it's SOLID_BSP or SOLID_VPHYSICS
-	FSOLID_USE_TRIGGER_BOUNDS	= 0x0080,	// Uses a special trigger bounds separate from the normal OBB
-	FSOLID_ROOT_PARENT_ALIGNED	= 0x0100,	// Collisions are defined in root parent's local coordinate space
-	FSOLID_TRIGGER_TOUCH_DEBRIS	= 0x0200,	// This trigger will touch debris objects
-	FSOLID_TRIGGER_TOUCH_PLAYER	= 0x0400,	// This trigger will touch only players
-	FSOLID_NOT_MOVEABLE			= 0x0800,	// Assume this object will not move
 
-	FSOLID_MAX_BITS	= 12
+	FSOLID_MAX_BITS	= 3
 };
 
 //-----------------------------------------------------------------------------
@@ -343,6 +328,18 @@ enum RenderFx_t : unsigned char
 	kRenderFxMax
 };
 
+typedef uint32 SpawnGroupHandle_t;
+
+// Stands for the active spawn group when creating entities
+#define SPAWN_GROUP_HANDLE_DEFAULT ((SpawnGroupHandle_t)-1)
+
+enum ESpawnGroupUnloadOption
+{
+	kSGUO_None = 0,
+	kSGUO_SaveEntities,
+	kSGUO_MergedIntoOwner,
+};
+
 enum BuiltInInteractionLayer_t
 {
 	LAYER_INDEX_CONTENTS_SOLID = 0,
@@ -377,7 +374,7 @@ enum StandardInteractionLayers_t
 	LAYER_INDEX_CONTENTS_NAV_IGNORE,
 	LAYER_INDEX_CONTENTS_NAV_LOCAL_IGNORE,
 	LAYER_INDEX_CONTENTS_POST_PROCESSING_VOLUME,
-	LAYER_INDEX_CONTENTS_UNUSED_LAYER3,
+	LAYER_INDEX_CONTENTS_VEHICLE_CLIP,
 	LAYER_INDEX_CONTENTS_CARRIED_OBJECT,
 	LAYER_INDEX_CONTENTS_PUSHAWAY,
 	LAYER_INDEX_CONTENTS_SERVER_ENTITY_ON_CLIENT,

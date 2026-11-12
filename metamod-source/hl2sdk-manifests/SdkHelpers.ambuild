@@ -18,6 +18,9 @@ class SdkLibBuilder(object):
             os.path.join(context.currentSourcePath)
         ]
         SdkHelpers.configureCxx(context, binary, self.sdk)
+        # HACKHACK
+        if self.sdk['name'] == 'outbreak' and self.name == 'tier1':
+            binary.compiler.defines += ['LOGGING_MODULE_NAME="{}"'.format(Project)]
         return binary
 
 
@@ -33,22 +36,33 @@ class SdkTarget(object):
             self.protoc = context.DetectProtoc(path = protoc_path)
             for path in sdk['include_paths']:
                 self.protoc.includes += [os.path.join(sdk['path'], path)]
-        # Find tier1
-        tier1 = SdkTarget.findLibrary(context, sdk, cxx, 'tier1')
-        # Find mathlib
-        mathlib = SdkTarget.findLibrary(context, sdk, cxx, 'mathlib')
 
-        # Only append the libs at the end, so they aren't found during the configureCxx step
-        if not 'tier1' in sdk :
-            sdk['tier1'] = {}
-        if not 'mathlib' in sdk :
-            sdk['mathlib'] = {}
-        sdk['tier1'][cxx.target.arch] = tier1
-        sdk['mathlib'][cxx.target.arch] = mathlib
+        for libname, path in SdkTarget.getHL2SDKLibs().items():
+            lib = SdkTarget.findLibrary(context, sdk, cxx, path)
+            if not libname in sdk:
+                sdk[libname] = {}
+            sdk[libname][cxx.target.arch] = lib
+
+
+    @staticmethod
+    def getHL2SDKLibs():
+        return {
+            #Lib name: Path to AMBuild file within hl2sdk
+            "tier1": "tier1",
+            "mathlib": "mathlib",
+            "interfaces": "interfaces",
+            "libprotobuf": os.path.join('thirdparty', 'protobuf-3.21.8')
+        }
 
 
     @staticmethod
     def findLibrary(context, sdk, cxx, name):
+        # Source 2 sdks are currently on a grace period where they still link mathlib/etc manually
+        # AMBuild's visual studio solution file generation needs to be fixed before this check can be removed
+        # If unaware of the details ask @GAMMACASE or @Kenzzer
+        if sdk['source2']:
+            return None
+
         # Mock libs are currently unhandled (different ambuild scripts)
         if sdk['name'] == 'mock':
             return None
@@ -239,11 +253,19 @@ class SdkHelpers(object):
         for path in sdk['include_paths']:
             cxx.cxxincludes += [os.path.join(sdk['path'], path)]
 
+        replaced_libs = set()
+        for name in ('tier1', 'mathlib'):
+            if sdk.get(name, {}).get(cxx.target.arch) is not None:
+                replaced_libs.update((name + '.lib', name + '.a',
+                                      name + '_i486.a', 'lib' + name + '.a'))
+
         # Link steps.
         for lib in SdkHelpers.getLists(sdk, 'libs', cxx):
-            cxx.linkflags += [os.path.join(sdk['path'], lib)]
+            if os.path.basename(lib).lower() not in replaced_libs:
+                cxx.linkflags += [os.path.join(sdk['path'], lib)]
         for lib in SdkHelpers.getLists(sdk, 'postlink_libs', cxx):
-            cxx.postlink += [os.path.join(sdk['path'], lib)]
+            if os.path.basename(lib).lower() not in replaced_libs:
+                cxx.postlink += [os.path.join(sdk['path'], lib)]
 
         dynamic_libs = SdkHelpers.getLists(sdk, 'dynamic_libs', cxx)
         for library in dynamic_libs:
@@ -276,17 +298,12 @@ class SdkHelpers(object):
                     pass
                 cxx.linkflags += ['-lstdc++']
 
-        if 'tier1' in sdk and cxx.target.arch in sdk['tier1']:
-            task = sdk['tier1'][cxx.target.arch]
-            if task != None:
-                cxx.postlink += [os.path.join(context.buildPath, task.binary.path)]
-                cxx.linkdeps += [task.binary]
-
-        if 'mathlib' in sdk and cxx.target.arch in sdk['mathlib']:
-            task = sdk['mathlib'][cxx.target.arch]
-            if task != None:
-                cxx.postlink += [os.path.join(context.buildPath, task.binary.path)]
-                cxx.linkdeps += [task.binary]
+        for libname in SdkTarget.getHL2SDKLibs().keys():
+            if libname in sdk and cxx.target.arch in sdk[libname]:
+                task = sdk[libname][cxx.target.arch]
+                if task != None:
+                    cxx.postlink += [os.path.join(context.buildPath, task.binary.path)]
+                    cxx.linkdeps += [task.binary]
 
 
 rvalue = SdkHelpers()

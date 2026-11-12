@@ -23,9 +23,8 @@
 
 #include "mathlib/mathlib.h"
 #include "mathlib/vector.h"
-#if !defined( _X360 )
+#include "mathlib/vectoraligned.h"
 #include "sse.h"
-#endif
 
 #include "mathlib/ssemath.h"
 #include "mathlib/ssequaternion.h"
@@ -41,8 +40,11 @@ bool s_bMathlibInitialized = false;
 void Sys_Error (char *error, ...);
 #endif
 
+const Vector vec3_origin(0,0,0);
+const VectorWS vec3ws_origin(0,0,0);
 const QAngle vec3_angle(0,0,0);
 const Quaternion quat_identity(0,0,0,1);
+const QuaternionWS quatws_identity(0,0,0,1);
 const Vector vec3_invalid( FLT_MAX, FLT_MAX, FLT_MAX );
 const int nanmask = 255<<23;
 
@@ -566,11 +568,11 @@ void VectorAngles( const float *forward, float *angles )
 R_ConcatRotations
 ================
 */
-void ConcatRotations (const float in1[3][3], const float in2[3][3], float out[3][3])
+void ConcatRotations (const matrix3x4_t &in1, const matrix3x4_t &in2, matrix3x4_t &out)
 {
 	Assert( s_bMathlibInitialized );
-	Assert( in1 != out );
-	Assert( in2 != out );
+	Assert( &in1 != &out );
+	Assert( &in2 != &out );
 	out[0][0] = in1[0][0] * in2[0][0] + in1[0][1] * in2[1][0] +
 				in1[0][2] * in2[2][0];
 	out[0][1] = in1[0][0] * in2[0][1] + in1[0][1] * in2[1][1] +
@@ -920,19 +922,9 @@ void AngleVectors( const QAngle &angles, Vector *forward, Vector *right, Vector 
 	
 	float sr, sp, sy, cr, cp, cy;
 
-#ifdef _X360
-	fltx4 radians, scale, sine, cosine;
-	radians = LoadUnaligned3SIMD( angles.Base() );
-	scale = ReplicateX4( M_PI_F / 180.f ); 
-	radians = MulSIMD( radians, scale );
-	SinCos3SIMD( sine, cosine, radians ); 	
-	sp = SubFloat( sine, 0 );	sy = SubFloat( sine, 1 );	sr = SubFloat( sine, 2 );
-	cp = SubFloat( cosine, 0 );	cy = SubFloat( cosine, 1 );	cr = SubFloat( cosine, 2 );
-#else
 	SinCos( DEG2RAD( angles[YAW] ), &sy, &cy );
 	SinCos( DEG2RAD( angles[PITCH] ), &sp, &cp );
 	SinCos( DEG2RAD( angles[ROLL] ), &sr, &cr );
-#endif
 
 	if (forward)
 	{
@@ -1198,20 +1190,9 @@ void AngleMatrix( const QAngle &angles, matrix3x4_t& matrix )
 
 	float sr, sp, sy, cr, cp, cy;
 
-#ifdef _X360
-	fltx4 radians, scale, sine, cosine;
-	radians = LoadUnaligned3SIMD( angles.Base() );
-	scale = ReplicateX4( M_PI_F / 180.f ); 
-	radians = MulSIMD( radians, scale );
-	SinCos3SIMD( sine, cosine, radians ); 	
-
-	sp = SubFloat( sine, 0 );	sy = SubFloat( sine, 1 );	sr = SubFloat( sine, 2 );
-	cp = SubFloat( cosine, 0 );	cy = SubFloat( cosine, 1 );	cr = SubFloat( cosine, 2 );
-#else
 	SinCos( DEG2RAD( angles[YAW] ), &sy, &cy );
 	SinCos( DEG2RAD( angles[PITCH] ), &sp, &cp );
 	SinCos( DEG2RAD( angles[ROLL] ), &sr, &cr );
-#endif
 
 	// matrix = (YAW * PITCH) * ROLL
 	matrix[0][0] = cp*cy;
@@ -2016,22 +1997,9 @@ void AngleQuaternion( const RadianEuler &angles, Quaternion &outQuat )
 
 	float sr, sp, sy, cr, cp, cy;
 
-#ifdef _X360
-	fltx4 radians, scale, sine, cosine;
-	radians = LoadUnaligned3SIMD( &angles.x );
-	scale = ReplicateX4( 0.5f ); 
-	radians = MulSIMD( radians, scale );
-	SinCos3SIMD( sine, cosine, radians ); 	
-
-	// NOTE: The ordering here is *different* from the AngleQuaternion below
-	// because p, y, r are not in the same locations in QAngle + RadianEuler. Yay!
-	sr = SubFloat( sine, 0 );	sp = SubFloat( sine, 1 );	sy = SubFloat( sine, 2 );	
-	cr = SubFloat( cosine, 0 );	cp = SubFloat( cosine, 1 );	cy = SubFloat( cosine, 2 );	
-#else
 	SinCos( angles.z * 0.5f, &sy, &cy );
 	SinCos( angles.y * 0.5f, &sp, &cp );
 	SinCos( angles.x * 0.5f, &sr, &cr );
-#endif
 
 	// NJS: for some reason VC6 wasn't recognizing the common subexpressions:
 	float srXcp = sr * cp, crXsp = cr * sp;
@@ -2060,22 +2028,9 @@ void AngleQuaternion( const QAngle &angles, Quaternion &outQuat )
 
 	float sr, sp, sy, cr, cp, cy;
 
-#ifdef _X360
-	fltx4 radians, scale, sine, cosine;
-	radians = LoadUnaligned3SIMD( angles.Base() );
-	scale = ReplicateX4( 0.5f * M_PI_F / 180.f ); 
-	radians = MulSIMD( radians, scale );
-	SinCos3SIMD( sine, cosine, radians ); 	
-
-	// NOTE: The ordering here is *different* from the AngleQuaternion above
-	// because p, y, r are not in the same locations in QAngle + RadianEuler. Yay!
-	sp = SubFloat( sine, 0 );	sy = SubFloat( sine, 1 );	sr = SubFloat( sine, 2 );	
-	cp = SubFloat( cosine, 0 );	cy = SubFloat( cosine, 1 );	cr = SubFloat( cosine, 2 );	
-#else
 	SinCos( DEG2RAD( angles.y ) * 0.5f, &sy, &cy );
 	SinCos( DEG2RAD( angles.x ) * 0.5f, &sp, &cp );
 	SinCos( DEG2RAD( angles.z ) * 0.5f, &sr, &cr );
-#endif
 
 	// NJS: for some reason VC6 wasn't recognizing the common subexpressions:
 	float srXcp = sr * cp, crXsp = cr * sp;
@@ -3308,7 +3263,6 @@ void MathLib_Init( float gamma, float texGamma, float brightness, int overbright
 
 	// FIXME: Hook SSE into VectorAligned + Vector4DAligned
 
-#if !defined( _X360 )
 	// Grab the processor information:
 	const CPUInformation& pi = *GetCPUInformation();
 
@@ -3332,26 +3286,7 @@ void MathLib_Init( float gamma, float texGamma, float brightness, int overbright
 		s_bMMXEnabled = false;
 	}
 
-	// SSE Generally performs better than 3DNow when present, so this is placed 
-	// first to allow SSE to override these settings.
-#if !defined( OSX ) && !defined( PLATFORM_WINDOWS_PC64 ) && !defined(LINUX)
-	if ( bAllow3DNow && pi.m_b3DNow )
-	{
-		s_b3DNowEnabled = true;
-
-		// Select the 3DNow specific routines if available;
-		pfVectorNormalize = _3DNow_VectorNormalize;
-		pfVectorNormalizeFast = _3DNow_VectorNormalizeFast;
-		pfInvRSquared = _3DNow_InvRSquared;
-		pfSqrt = _3DNow_Sqrt;
-		pfRSqrt = _3DNow_RSqrt;
-		pfRSqrtFast = _3DNow_RSqrt;
-	}
-	else
-#endif
-	{
-		s_b3DNowEnabled = false;
-	}
+	s_b3DNowEnabled = false;
 
 	if ( bAllowSSE && pi.m_bSSE )
 	{
@@ -3388,7 +3323,6 @@ void MathLib_Init( float gamma, float texGamma, float brightness, int overbright
 	{
 		s_bSSE2Enabled = false;
 	}
-#endif // !_X360
 
 	s_bMathlibInitialized = true;
 

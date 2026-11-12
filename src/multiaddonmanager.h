@@ -21,6 +21,15 @@
 
 #include <ISmmPlugin.h>
 #include <igameevents.h>
+#include <engine2/gamesessionconfiguration.h>
+#include <engine2/hoststate.h>
+#include <engine2/igameeventsystem.h>
+#include <engine2/inetworkgameserver.h>
+#include <engine2/inetworkserverservice.h>
+#include <engine2/isource2server.h>
+#include <engine2/ivengineserver2.h>
+#include <engine2/networkgameserverbase.h>
+#include <engine2/serversideclient.h>
 #include "khook.hpp"
 #include "utlqueue.h"
 #include "utlvector.h"
@@ -65,7 +74,7 @@ public: //hooks
 	KHook::Return<bool> Hook_SendNetMessage_ServerSideClient(CServerSideClientBase *pClient, const CNetMessage *pData, NetChannelBufType_t bufType);
 	KHook::Return<bool> Hook_SendNetMessage_HLTVClient(CServerSideClientBase *pClient, const CNetMessage *pData, NetChannelBufType_t bufType);
 	KHook::Return<void> Hook_SetPendingHostStateRequest(CHostStateMgr *pMgrDoNotUse, CHostStateRequest *pRequest);
-	KHook::Return<void> Hook_ReplyConnection(INetworkGameServer *pThis, CServerSideClient *pClient);
+	KHook::Return<void> Hook_ReplyConnection(CNetworkGameServerBase *pThis, CServerSideClient *pClient);
 	KHook::Return<uint64> Hook_ScriptGetAddon();
 
 	void ParseCfg();
@@ -122,7 +131,7 @@ private:
 	KHook::Virtual<CServerSideClientBase, bool, const CNetMessage *, NetChannelBufType_t> m_hookSendNetMessage_ServerSideClient;
 	KHook::Virtual<CServerSideClientBase, bool, const CNetMessage *, NetChannelBufType_t> m_hookSendNetMessage_HLTVClient;
 	KHook::Function<void, CHostStateMgr *, CHostStateRequest *> m_hookSetPendingHostStateRequest;
-	KHook::Function<void, INetworkGameServer *, CServerSideClient *> m_hookReplyConnection;
+	KHook::Function<void, CNetworkGameServerBase *, CServerSideClient *> m_hookReplyConnection;
 	KHook::Function<uint64> m_hookScriptGetAddon;
 
 	CUtlVector<PublishedFileId_t> m_ImportantDownloads; // Important addon downloads that will trigger a map reload when finished

@@ -18,11 +18,7 @@ FORWARD_DECLARE_HANDLE( InputContextHandle_t );
 // Standard maximum +/- value of a joystick axis
 #define MAX_BUTTONSAMPLE			32768
 
-#if !defined( _X360 )
 #define INVALID_USER_ID		-1
-#else
-#define INVALID_USER_ID		XBX_INVALID_USER_ID
-#endif
 
 //-----------------------------------------------------------------------------
 // Forward declarations: 
@@ -73,6 +69,8 @@ enum InputEventType_t
 	IE_ButtonReleased,		// m_nData contains a ButtonCode_t
 	IE_ButtonDoubleClicked,	// m_nData contains a ButtonCode_t
 	IE_AnalogValueChanged,	// m_nData contains an AnalogCode_t, m_nData2 contains the value
+	IE_ButtonPressedRepeating,
+	IE_CursorPositionChanged,
 
 	IE_FirstSystemEvent = 100,
 	IE_Quit = IE_FirstSystemEvent,
@@ -80,12 +78,16 @@ enum InputEventType_t
 	IE_ControllerUnplugged,	// m_nData contains the controller ID
 	IE_Close,
 	IE_WindowSizeChanged,	// m_nData contains width, m_nData2 contains height, m_nData3 = 0 if not minimized, 1 if minimized
+	IE_ActivateApp,
+	IE_ActivateWindow,
+	IE_WindowMove,
+	IE_CopyData,
+	IE_ScreenOrientationChanged,
 
 	IE_FirstUIEvent = 200,
-	IE_LocateMouseClick = IE_FirstUIEvent,
-	IE_SetCursor,
-	IE_KeyTyped,
+	IE_KeyTyped = IE_FirstUIEvent,
 	IE_KeyCodeTyped,
+	IE_KeyCodeReleased,
 	IE_InputLanguageChanged,
 	IE_IMESetWindow,
 	IE_IMEStartComposition,
@@ -95,6 +97,7 @@ enum InputEventType_t
 	IE_IMEChangeCandidates,
 	IE_IMECloseCandidates,
 	IE_IMERecomputeModes,
+	IE_MultiTouchData,
 
 	IE_FirstVguiEvent = 1000,	// Assign ranges for other systems that post user events here
 	IE_FirstAppEvent = 2000,
@@ -105,9 +108,15 @@ struct InputEvent_t
 	PlatWindow_t m_hWnd;
 	int m_nType;				// Type of the event (see InputEventType_t)
 	int m_nTick;				// Tick on which the event occurred
+	double m_flInputTime;		// Plat_FloatTime() of the poll that generated the event
+	uint64 m_nSDLTimestamp;		// SDL event timestamp in nanoseconds, 0 for events that don't come from SDL
 	uint64 m_nData;				// Generic 64-bit data, what it contains depends on the event
 	int m_nData2;				// Generic 32-bit data, what it contains depends on the event
 	int m_nData3;				// Generic 32-bit data, what it contains depends on the event
+	// IE_CursorPositionChanged and IE_MultiTouchData only: the position relative to m_hWnd, multiplied by the
+	// IInputSystem::SetCoordinateTransform scale when m_hWnd is that transform's window
+	float m_flWindowX;
+	float m_flWindowY;
 };
 
 #endif // INPUTENUMS_H
