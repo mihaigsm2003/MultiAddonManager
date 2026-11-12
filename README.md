@@ -1,6 +1,7 @@
 # MultiAddonManager
 
 A MetaMod plugin that allows you to use multiple workshop addons at once and have clients download them.
+Original plugin is here: https://github.com/Source2ZE/MultiAddonManager  Thanks to xen
 
 ## ConVars
 - `mm_extra_addons <ids>` The workshop IDs of extra addons separated by commas, addons will be downloaded (if not present) and mounted (e.g. "3090239773,3070231528").
@@ -39,7 +40,7 @@ IMultiAddonManager *pInterface = (IMultiAddonManager*)g_SMAPI->MetaFactory(MULTI
 
 ## Installation
 
-- Install the latest CS2 build of [Metamod:Source](https://www.metamodsource.net/downloads.php/?branch=master)
+- Install the latest CS2 build of [Metamod:Source](https://github.com/alliedmodders/metamod-source/releases/latest)
 - Download the [latest release package](https://github.com/Source2ZE/MultiAddonManager/releases/latest) for your OS
 - Extract the package contents into `game/csgo` on your server
 - Edit the config file at `game/csgo/cfg/multiaddonmanager/multiaddonmanager.cfg`
